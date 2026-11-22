@@ -1,0 +1,54 @@
+# Unofficial custom Windows build of OONI Probe.
+# Uses the nouserauth build tag and Go 1.26.
+# Builds ooniprobe.exe and miniooni.exe into /CLI and uploads them as an artifact.
+
+name: Windows custom nouserauth build
+
+on:
+  push:
+    branches:
+      - "custom-nouserauth-go1.26-windows"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.11"
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+
+      - name: Set Go module version
+        shell: msys2 {0}
+        run: go mod edit -go=1.26.0 -toolchain=none
+
+      # - name: Run make userauth
+      #   shell: msys2 {0}
+      #   run: make userauth
+
+      - name: Build Windows executables
+        shell: msys2 {0}
+        run: |
+          go build -buildvcs=false -tags="goexperiment.jsonv2,nouserauth" -v -ldflags="-s -w -extldflags=-static" -o CLI/ooniprobe.exe ./cmd/ooniprobe
+          go build -buildvcs=false -tags="goexperiment.jsonv2,nouserauth" -v -ldflags="-s -w -extldflags=-static" -o CLI/miniooni.exe ./internal/cmd/miniooni
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ooniprobe-windows
+          path: |
+            CLI/ooniprobe.exe
+            CLI/miniooni.exe
+          retention-days: 90
