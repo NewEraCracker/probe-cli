@@ -1,6 +1,6 @@
 # Unofficial custom Windows build of OONI Probe.
 # Uses the nouserauth build tag and Go 1.26.
-# Builds ooniprobe.exe and miniooni.exe into /CLI and uploads them as an artifact.
+# Cross-compiles ooniprobe.exe and miniooni.exe from Linux into /CLI and uploads them as an artifact.
 
 name: Windows custom nouserauth build
 
@@ -12,7 +12,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: ubuntu-26.04
     env:
       GOTOOLCHAIN: local
 
@@ -23,24 +23,20 @@ jobs:
         with:
           go-version: "1.26.11"
 
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          path-type: inherit
-          install: >-
-            make
-            mingw-w64-x86_64-gcc
+      - name: Install MinGW-w64 cross compiler
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gcc-mingw-w64-x86-64
 
       - name: Set Go module version
-        shell: msys2 {0}
         run: go mod edit -go=1.26.0 -toolchain=none
 
-      # - name: Run make userauth
-      #   shell: msys2 {0}
-      #   run: make userauth
-
       - name: Build Windows executables
-        shell: msys2 {0}
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "1"
+          CC: x86_64-w64-mingw32-gcc
         run: |
           go build -buildvcs=false -tags="goexperiment.jsonv2,nouserauth" -v -ldflags="-s -w -extldflags=-static" -o CLI/ooniprobe.exe ./cmd/ooniprobe
           go build -buildvcs=false -tags="goexperiment.jsonv2,nouserauth" -v -ldflags="-s -w -extldflags=-static" -o CLI/miniooni.exe ./internal/cmd/miniooni
