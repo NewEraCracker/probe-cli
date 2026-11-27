@@ -1,0 +1,60 @@
+# Unofficial Go 1.26 custom Windows build of OONI Probe.
+# Cross-compiles ooniprobe.exe and miniooni.exe from Linux into /CLI and uploads them as an artifact.
+
+name: laligagate-cli
+
+on:
+  push:
+    branches:
+      - "laligagate-cli"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.11"
+
+      - name: Install MinGW-w64 cross compiler
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 nasm
+
+      - name: Set Go module version
+        run: go mod edit -go=1.26.0 -toolchain=none
+
+      - name: Cross-compile userauth
+        env:
+          RUSTUP_TOOLCHAIN: "1.99.1"
+          USERAUTH_FROM_SOURCE: "1"
+          USERAUTH_RUST_TARGET: "x86_64-pc-windows-gnu"
+        run: |
+          go run ./internal/cmd/buildtool linux userauth
+          mv ./internal/userauth/lib/linux ./internal/userauth/lib/windows
+          x86_64-w64-mingw32-objcopy --remove-section=.llvmbc --remove-section=.llvmcmd internal/userauth/lib/windows/x86_64/libuniffi_ooniprobe.a
+
+      - name: Build Windows executables
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "1"
+          CGO_LDFLAGS: "-lpthread"
+          CC: x86_64-w64-mingw32-gcc
+        run: |
+          go build -buildvcs=false -tags="goexperiment.jsonv2" -v -ldflags="-s -w -extldflags=-static" -o CLI/ooniprobe-windows-amd64.exe ./cmd/ooniprobe
+          go build -buildvcs=false -tags="goexperiment.jsonv2" -v -ldflags="-s -w -extldflags=-static" -o CLI/miniooni-windows-amd64.exe ./internal/cmd/miniooni
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ooniprobe-windows-amd64
+          path: |
+            CLI/ooniprobe-windows-amd64.exe
+            CLI/miniooni-windows-amd64.exe
+          retention-days: 90
